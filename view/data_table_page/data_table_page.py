@@ -1,9 +1,11 @@
+import csv
+import io
 from datetime import datetime, timedelta, timezone
 from numbers import Number
-from PySide6.QtCore import (Qt, QAbstractTableModel, QModelIndex, Signal, QTime, QDateTime, QTimeZone, QTimer, QSize)
+from PySide6.QtCore import (Qt, QAbstractTableModel, QModelIndex, Signal, QTime, QDateTime, QTimeZone, QTimer, QSize, QSaveFile, QIODevice)
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QPushButton, QDateEdit, QTimeEdit, QTableView, QHeaderView,
-    QAbstractItemView, QSizePolicy, QLayout)
+    QAbstractItemView, QSizePolicy, QLayout, QFileDialog)
 from view.data_recorder_page.recording_worker import COLUMNS
 from .data_table_worker import DataTableWorker, SEARCH_LIMIT
 
@@ -165,8 +167,10 @@ class DataTablePage(QWidget):
         self.replay_button.setEnabled(False)
         self.charts_button = QPushButton("Show charts")
         self.charts_button.setEnabled(False)
+        self.export_button = QPushButton("Export CSV")
+        self.export_button.setEnabled(False)
         self.action_buttons = (self.search_button, self.latest_button, self.reset_button,
-                               self.replay_button, self.charts_button)
+                               self.replay_button, self.charts_button, self.export_button)
         for button in self.action_buttons:
             button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         summary = QHBoxLayout()
@@ -195,6 +199,8 @@ class DataTablePage(QWidget):
         self.model.selection_changed.connect(lambda count: self.selected_label.setText(f"Selected: {count}"))
         self.model.selection_changed.connect(lambda count: self.replay_button.setEnabled(count > 0 and self.worker is None))
         self.model.selection_changed.connect(lambda count: self.charts_button.setEnabled(count > 0 and self.worker is None))
+        self.model.selection_changed.connect(lambda count: self.export_button.setEnabled(count > 0 and self.worker is None))
+        self.export_button.clicked.connect(self.export_selected_csv)
         self.charts_button.clicked.connect(self.send_selected_charts)
         self.replay_button.clicked.connect(self.send_selected)
         self.search_button.clicked.connect(self.search)
@@ -212,6 +218,42 @@ class DataTablePage(QWidget):
         if rows:
             self.charts_requested.emit(rows)
 
+    def export_selected_csv(self):
+        rows = self.model.selected_rows()
+        if not rows:
+            return
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export selected records", "kinova-selected.csv", "CSV files (*.csv)")
+        if not filename:
+            return
+        if not filename.lower().endswith(".csv"):
+            filename += ".csv"
+        output = QSaveFile(filename)
+        try:
+            # Export original values, not rounded table display strings.
+            buffer = io.StringIO(newline="")
+            writer = csv.writer(buffer)
+            writer.writerow(COLUMNS)
+            for row in rows:
+                values = []
+                for column in COLUMNS:
+                    value = row[column]
+                    if isinstance(value, datetime):
+                        stamp = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+                        value = stamp.isoformat(timespec="microseconds")
+                    values.append(value)
+                writer.writerow(values)
+            # A UTF-8 BOM also lets Excel recognize the encoding automatically.
+            data = buffer.getvalue().encode("utf-8-sig")
+            if not output.open(QIODevice.OpenModeFlag.WriteOnly):
+                raise OSError(output.errorString())
+            if output.write(data) != len(data) or not output.commit():
+                raise OSError(output.errorString())
+            self.status.setText(f"Exported {len(rows)} selected records to {filename}")
+        except (OSError, ValueError, TypeError) as error:
+            output.cancelWriting()
+            self.status.setText(f"CSV export failed: {error}")
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, "action_buttons"):
@@ -226,14 +268,15 @@ class DataTablePage(QWidget):
         spacing = spacing if spacing >= 0 else 12
         required_width = (sum(widget.sizeHint().width() for widget in self.filter_widgets)
                           + sum(button.sizeHint().width() for button in self.action_buttons)
-                          + spacing * 8 + 40)
+                          + spacing * (len(self.filter_widgets) + len(self.action_buttons) - 1) + 40)
         mode = "wide" if self.width() >= required_width else ("compact" if self.width() < 900 else "medium")
         if mode == self._layout_compact:
             return
         self._layout_compact = mode
         while self.filters.count():
             self.filters.takeAt(0)
-        for i in range(10):
+        stretch_column = len(self.filter_widgets) + len(self.action_buttons)
+        for i in range(stretch_column + 1):
             self.filters.setColumnStretch(i, 0)
         columns = 2 if mode == "compact" else 4
         for i, widget in enumerate(self.filter_widgets):
@@ -242,7 +285,7 @@ class DataTablePage(QWidget):
         if mode == "wide":
             for i, button in enumerate(self.action_buttons):
                 self.filters.addWidget(button, 0, i + 4, Qt.AlignmentFlag.AlignBottom)
-            self.filters.setColumnStretch(9, 1)
+            self.filters.setColumnStretch(stretch_column, 1)
         else:
             row = 2 if mode == "compact" else 1
             for i, button in enumerate(self.action_buttons):
@@ -314,6 +357,7 @@ class DataTablePage(QWidget):
         self.set_busy(False)
 
     def set_busy(self, busy):
+        self.export_button.setEnabled(not busy and bool(self.model.checked))
         self.charts_button.setEnabled(not busy and bool(self.model.checked))
         self.replay_button.setEnabled(not busy and bool(self.model.checked))
         for widget in (self.search_button, self.latest_button, self.reset_button,

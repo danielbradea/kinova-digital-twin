@@ -68,6 +68,8 @@ Loads the latest 100 database records on first entry. Use the start/end date and
 
 Select records using the checkbox column. Click its header to select or clear all loaded records. **Show in Kinova** opens the selected poses in the digital twin. **Show charts** opens the selected telemetry in the selected-data charts page. These actions become available when at least one row is checked. Numeric cells show rounded values; tooltips expose the original values.
 
+**Export CSV** saves only the checked rows, in their table order, to a file of your choice. The export includes all 41 database columns with their original names and full numeric precision, UTC ISO 8601 timestamps and empty cells for missing values. Files use comma separators and UTF-8 with a BOM for Excel compatibility. Exporting preserves the current selection.
+
 ### Kinova Digital Twin
 
 Entering through the sidebar loads the latest database pose. **Latest position** reloads it; **Recenter camera** restores the view. Joint cards and the details panel display the current record.
@@ -114,4 +116,3 @@ resources/kortex_description/   Gen3 6-DOF URDF, required STL meshes and attribu
 ```
 
 Keep `resources` alongside `main.py` when copying the project. Resource paths are resolved relative to the source files. The retained model is `GEN3-6DOF_NO-VISION_URDF_ARM_V01.urdf`; see the retained model README for upstream attribution.
-
