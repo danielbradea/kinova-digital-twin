@@ -1,0 +1,12 @@
+# Runtime dependencies, matching the tested Windows Python 3.14 environment.
+PySide6==6.11.2
+numpy==2.5.3
+pyqtgraph==0.14.0
+pyvista==0.49.0
+pyvistaqt==0.13.1
+vtk==9.7.1
+yourdfpy==0.0.60
+trimesh==5.1.1
+psycopg[binary]==3.3.6
+# Official Kinova Kortex SDK; pip installs its declared dependencies as well.
+kortex-api @ https://artifactory.kinovaapps.com/artifactory/generic-public/kortex/API/3.4.0/kortex_api-3.4.0.15-py3-none-any.whl#sha256=91a7e10d4f721c67b10886c1c368ba521168899717737991ff9484d1147b72dd
