@@ -1,6 +1,6 @@
 
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QStackedWidget
-from PySide6.QtWidgets import QLineEdit, QAbstractSpinBox, QComboBox
+from PySide6.QtWidgets import QLineEdit, QAbstractSpinBox, QComboBox, QMessageBox
 
 from view.charts_view_page.charts_view_page import ChartsViewPage
 from view.charts_view_page.selected_charts_view_page import SelectedChartsViewPage
@@ -129,6 +129,8 @@ class AppLayout(QMainWindow):
 
         self.data_recorder_page = data_recorder_page
         self._waiting_for_recording = False
+        self._close_recording_confirmed = False
+        self._close_confirmation_open = False
 
         # Add pages
         self.content.addWidget(home_page)
@@ -228,6 +230,33 @@ class AppLayout(QMainWindow):
         }, "table": self.data_recorder_page.recording_component.table_input.text().strip()}
 
     def closeEvent(self, event):
+        if self._close_confirmation_open:
+            event.ignore()
+            return
+        recording_worker = self.data_recorder_page.recording_worker
+        if recording_worker is not None and not self._close_recording_confirmed:
+            # Ask before stopping any stream; cancelling leaves recording running.
+            dialog = QMessageBox(self)
+            dialog.setWindowTitle("Recording in progress")
+            dialog.setIcon(QMessageBox.Icon.Warning)
+            dialog.setText("Data is currently being recorded to the database.")
+            dialog.setInformativeText(
+                "Closing the application will stop recording. "
+                "The application will wait for the remaining data to be saved before closing.")
+            stop_close = dialog.addButton(
+                "Stop recording and close", QMessageBox.ButtonRole.AcceptRole)
+            cancel = dialog.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+            dialog.setDefaultButton(cancel)
+            dialog.setEscapeButton(cancel)
+            self._close_confirmation_open = True
+            try:
+                dialog.exec()
+            finally:
+                self._close_confirmation_open = False
+            if dialog.clickedButton() is not stop_close:
+                event.ignore()
+                return
+            self._close_recording_confirmed = True
         # Defer closing until workers release sockets and database connections.
         self.charts_view_page.stop_stream()
         charts_worker = self.charts_view_page.worker

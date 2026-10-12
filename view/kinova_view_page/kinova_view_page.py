@@ -24,6 +24,19 @@ def timestamp_seconds(value):
     return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value).timestamp()
 
 
+def playback_offsets(rows, skip_gaps):
+    """Preserve sample timing while optionally compressing recording breaks."""
+    stamps = [timestamp_seconds(row["time"]) for row in rows]
+    gaps = [b - a for a, b in zip(stamps, stamps[1:])]
+    positive = [gap for gap in gaps if gap > 0]
+    typical = median(positive) if positive else .1
+    threshold = max(1., typical * 10)
+    offsets = [0.] if stamps else []
+    for gap in gaps:
+        offsets.append(offsets[-1] + (typical if skip_gaps and gap > threshold else gap))
+    return offsets, (offsets[-1] + typical if offsets else 0.)
+
+
 class KinovaViewPage(QWidget):
     def __init__(self, database_config_provider=None):
         super().__init__()
@@ -146,10 +159,14 @@ class KinovaViewPage(QWidget):
         self.pause_button = QPushButton("Ⅱ Pause")
         self.stop_button = QPushButton("■ Stop")
         self.loop = QCheckBox("Loop")
+        self.skip_gaps = QCheckBox("Skip recording gaps")
+        self.skip_gaps.setChecked(True)
+        self.skip_gaps.setToolTip("Compress gaps longer than 1 second and 10 typical sample intervals")
         for button in (self.play_button, self.pause_button, self.stop_button):
             button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             controls.addWidget(button)
         controls.addWidget(self.loop)
+        controls.addWidget(self.skip_gaps)
         controls.addStretch()
         self.root.addLayout(controls)
         self.status = QLabel("No data loaded")
@@ -174,6 +191,7 @@ class KinovaViewPage(QWidget):
         self.stop_button.clicked.connect(self.stop)
         self.slider.valueChanged.connect(self.seek)
         self.speed.currentIndexChanged.connect(self.change_speed)
+        self.skip_gaps.toggled.connect(self.change_timing)
         self._speed = 1.
         self.refresh_button.clicked.connect(self.load_latest)
         self.camera_button.clicked.connect(self.robot.recenter_camera)
@@ -188,6 +206,7 @@ class KinovaViewPage(QWidget):
         self.slider.setEnabled(playable)
         self.speed.setEnabled(playable)
         self.loop.setEnabled(playable)
+        self.skip_gaps.setEnabled(playable)
 
     def load_latest(self):
         if self.worker is not None:
@@ -241,11 +260,7 @@ class KinovaViewPage(QWidget):
         self._selected_mode = selected
         self.frame_index = 0
         self.elapsed = 0.
-        self.offsets = ([timestamp_seconds(row["time"]) - timestamp_seconds(ordered[0]["time"])
-                         for row in ordered] if ordered else [])
-        gaps = [b-a for a, b in zip(self.offsets, self.offsets[1:]) if b > a]
-        # Keep the final pose visible for one typical sample interval before looping.
-        self.duration = (self.offsets[-1] + (median(gaps) if gaps else .1)) if ordered else 0.
+        self.offsets, self.duration = playback_offsets(ordered, self.skip_gaps.isChecked())
         self.slider.blockSignals(True)
         self.slider.setRange(0, max(0, len(ordered)-1))
         self.slider.setValue(0)
@@ -336,6 +351,11 @@ class KinovaViewPage(QWidget):
         self._last_tick = time.monotonic()
         self.display_frame(index)
         self.status.setText(f'{"Playing" if self.timer.isActive() else "Paused"} — {index+1}/{len(self.frames)}')
+
+    def change_timing(self, _checked):
+        self.offsets, self.duration = playback_offsets(self.frames, self.skip_gaps.isChecked())
+        if self.frames:
+            self.seek(self.frame_index)
 
     def change_speed(self, _index):
         if self.timer.isActive():

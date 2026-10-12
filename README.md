@@ -56,7 +56,7 @@ Introduces the application and displays the Kinova 3D model. Rotate and zoom the
 
 Configures robot credentials/IP/UDP port and PostgreSQL credentials. **Test Connections** checks the database and authenticates with the robot, reading feedback. Both tests must succeed before recording starts.
 
-Choose a sampling interval (10–10,000 ms; default 100 ms) and destination table. **Start Recording** acquires feedback in a background worker and saves batches of 100 samples. **Stop** flushes the remaining samples and closes the connections. The sample counter shows committed records. Connection settings are disabled during recording. The table must already exist.
+Choose a sampling interval (10–10,000 ms; default 100 ms) and destination table. **Start Recording** acquires feedback in a background worker and saves batches of 100 samples. **Stop** flushes the remaining samples and closes the connections. Closing the window while recording asks whether to stop recording and close or cancel. Cancel keeps recording active; confirming waits for the remaining samples to be saved and the worker to finish before closing. The sample counter shows committed records. Connection settings are disabled during recording. The table must already exist.
 
 ### Live Reading
 
@@ -74,7 +74,7 @@ Select records using the checkbox column. Click its header to select or clear al
 
 Entering through the sidebar loads the latest database pose. **Latest position** reloads it; **Recenter camera** restores the view. Joint cards and the details panel display the current record.
 
-After using **Show in Kinova** in Data Table, selected records are sorted chronologically. Use **Play**, **Pause**, **Stop**, the timeline slider, **Loop** and the speed selector (0.25×–4×) to replay them. Playback follows the stored timestamp intervals and animates only the displayed model. Leaving the page pauses playback.
+After using **Show in Kinova** in Data Table, selected records are sorted chronologically. Use **Play**, **Pause**, **Stop**, the timeline slider, **Loop** and the speed selector (0.25×–4×) to replay them. Playback follows the stored timestamp intervals and animates only the displayed model. **Skip recording gaps** is enabled by default: gaps longer than both one second and ten typical sample intervals are shortened to one typical interval. Disable it to retain the original pauses between recording sessions. Leaving the page pauses playback.
 
 ### Live Charts
 
