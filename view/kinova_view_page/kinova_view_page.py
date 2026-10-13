@@ -81,8 +81,10 @@ class KinovaViewPage(QWidget):
         self.source_label.setWordWrap(True)
         source_row.addWidget(self.source_label, 1)
         self.refresh_button = QPushButton("↻ Latest position")
+        self.latest_100_button = QPushButton("Lastest 100")
         self.camera_button = QPushButton("Recenter camera")
         source_row.addWidget(self.refresh_button)
+        source_row.addWidget(self.latest_100_button)
         source_row.addWidget(self.camera_button)
         self.root.addLayout(source_row)
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -194,6 +196,7 @@ class KinovaViewPage(QWidget):
         self.skip_gaps.toggled.connect(self.change_timing)
         self._speed = 1.
         self.refresh_button.clicked.connect(self.load_latest)
+        self.latest_100_button.clicked.connect(lambda: self.load_latest_records(100))
         self.camera_button.clicked.connect(self.robot.recenter_camera)
         self.update_controls()
         self.adapt_layout()
@@ -209,6 +212,9 @@ class KinovaViewPage(QWidget):
         self.skip_gaps.setEnabled(playable)
 
     def load_latest(self):
+        self.load_latest_records(1)
+
+    def load_latest_records(self, limit):
         if self.worker is not None:
             return
         self.stop()
@@ -218,12 +224,14 @@ class KinovaViewPage(QWidget):
             if self.database_config_provider is None:
                 raise ValueError("Configure PostgreSQL in Data Recorder")
             config = self.database_config_provider()
-            self.worker = DataTableWorker(config, limit=1, parent=self)
+            self.worker = DataTableWorker(config, limit=limit, parent=self)
             self.worker.loaded.connect(lambda rows: self.receive_latest(rows, generation))
             self.worker.failed.connect(lambda error: self.query_failed(error, generation))
             self.worker.finished.connect(self.query_finished)
             self.refresh_button.setEnabled(False)
-            self.status.setText("Loading the latest position from the database…")
+            self.latest_100_button.setEnabled(False)
+            self.status.setText("Loading the latest position from the database…" if limit == 1
+                                else "Loading the latest 100 records from the database…")
             self.worker.start()
         except Exception as error:
             self.query_failed(str(error), generation)
@@ -241,6 +249,7 @@ class KinovaViewPage(QWidget):
         self.worker.deleteLater()
         self.worker = None
         self.refresh_button.setEnabled(True)
+        self.latest_100_button.setEnabled(True)
 
     def set_selected_rows(self, rows):
         self._generation += 1  # Ignore any pending latest-position result.
@@ -266,7 +275,9 @@ class KinovaViewPage(QWidget):
         self.slider.setValue(0)
         self.slider.blockSignals(False)
         self.source_label.setText(f"Table selection — {len(ordered)} records in chronological order"
-                                 if selected else "Latest available record")
+                                 if selected else
+                                 f"Latest {len(ordered)} records in chronological order"
+                                 if len(ordered) > 1 else "Latest available record")
         if ordered:
             self.display_frame(0)
             self.status.setText("Stopped" if len(ordered) > 1 else "Position loaded from the database")

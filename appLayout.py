@@ -88,7 +88,7 @@ class AppLayout(QMainWindow):
         btn_live_reading = QPushButton("Live Reading")
         btn_data_table = QPushButton("Data Table")
         btn_kinova_view_page = QPushButton("Kinova Digital Twin")
-        btn_chats_view_page = QPushButton("Live charts")
+        btn_chats_view_page = QPushButton("Live Charts")
 
         drawer_layout.addWidget(btn_home)
         drawer_layout.addWidget(btn_data_record)
